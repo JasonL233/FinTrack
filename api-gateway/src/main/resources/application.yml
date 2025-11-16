@@ -1,0 +1,61 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      #Global CORS configuration
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            exposedHeaders:
+              - Authorization
+            maxAge: 3600
+      
+      # Route definitions
+      routes:
+        # User Service Routes
+        - id: user-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - RewritePath=/api/users/(?<segment>.*), /api/users/${segment}
+        
+        # Transaciton Service Routes
+        - id: transaction-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/transactions/**
+          filters:
+            - RewritePath=/api/transactions/(?<segment>.*), /api/transactions/${segment}
+  
+jwt:
+  secret: ${JWT_SECRET:default}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+#Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    com.fintrack.gateway: DEBUG

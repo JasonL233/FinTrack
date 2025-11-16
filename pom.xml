@@ -16,6 +16,8 @@
     <modules>
         <module>common</module>
         <module>user-service</module>
+        <module>transaction-service</module>
+        <module>api-gateway</module>
     </modules>
 
     <parent>
