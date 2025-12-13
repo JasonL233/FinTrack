@@ -23,23 +23,8 @@ spring:
               - Authorization
             maxAge: 3600
       
-      # Route definitions
-      routes:
-        # User Service Routes
-        - id: user-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/users/**
-          filters:
-            - RewritePath=/api/users/(?<segment>.*), /api/users/${segment}
-        
-        # Transaciton Service Routes
-        - id: transaction-service
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/transactions/**
-          filters:
-            - RewritePath=/api/transactions/(?<segment>.*), /api/transactions/${segment}
+      # Route definitions (overridden by GatewayConfig.java)
+      routes: []
   
 jwt:
   secret: ${JWT_SECRET:default}

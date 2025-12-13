@@ -74,27 +74,36 @@ if [ "$1" = "all" ] || [ "$1" = "" ]; then
     GATEWAY_PID=$!
     echo "  ✓ API gateway started (PID: $GATEWAY_PID)"
     
+    sleep 2
+    
+    echo "Starting notification-service (port 8083)..."
+    (cd "$SCRIPT_DIR/notification-service" && mvn spring-boot:run > "$SCRIPT_DIR/logs/notification-service.log" 2>&1) &
+    NOTIFICATION_PID=$!
+    echo "  ✓ Notification service started (PID: $NOTIFICATION_PID)"
+    
     echo ""
     echo "✅ All services started!"
     echo ""
     echo "📋 Service PIDs:"
-    echo "  User Service:       $USER_PID"
+    echo "  User Service:        $USER_PID"
     echo "  Transaction Service: $TRANSACTION_PID"
-    echo "  API Gateway:        $GATEWAY_PID"
+    echo "  API Gateway:         $GATEWAY_PID"
+    echo "  Notification Service: $NOTIFICATION_PID"
     echo ""
     echo "📝 Logs are in the 'logs' directory:"
     echo "  tail -f logs/user-service.log"
     echo "  tail -f logs/transaction-service.log"
     echo "  tail -f logs/api-gateway.log"
+    echo "  tail -f logs/notification-service.log"
     echo ""
     echo "🛑 To stop all services:"
-    echo "  kill $USER_PID $TRANSACTION_PID $GATEWAY_PID"
+    echo "  kill $USER_PID $TRANSACTION_PID $GATEWAY_PID $NOTIFICATION_PID"
     echo "  or: ./start-services.sh stop"
     echo ""
     
     # Save PIDs to file for easy stopping
     mkdir -p "$SCRIPT_DIR/logs"
-    echo "$USER_PID $TRANSACTION_PID $GATEWAY_PID" > "$SCRIPT_DIR/logs/service.pids"
+    echo "$USER_PID $TRANSACTION_PID $GATEWAY_PID $NOTIFICATION_PID" > "$SCRIPT_DIR/logs/service.pids"
     
 elif [ "$1" = "stop" ]; then
     # Stop all services
@@ -123,6 +132,9 @@ elif [ "$1" != "" ]; then
         api-gateway)
             cd "$SCRIPT_DIR/api-gateway" && mvn spring-boot:run
             ;;
+        notification-service)
+            cd "$SCRIPT_DIR/notification-service" && mvn spring-boot:run
+            ;;
         *)
             echo "❌ Unknown service: $SERVICE"
             echo ""
@@ -134,6 +146,7 @@ elif [ "$1" != "" ]; then
             echo "  user-service       - Start only user service (port 8081)"
             echo "  transaction-service - Start only transaction service (port 8082)"
             echo "  api-gateway        - Start only API gateway (port 8080)"
+            echo "  notification-service - Start only notification service (port 8083)"
             exit 1
             ;;
     esac
