@@ -1,0 +1,56 @@
+{
+    "family": "fintrack-api-gateway",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "256",
+    "memory": "512",
+    "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+    "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+    "containerDefinitions": [
+      {
+        "name": "api-gateway",
+        "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/fintrack-api-gateway:latest",
+        "portMappings": [
+          {
+            "containerPort": 8080,
+            "protocol": "tcp"
+          }
+        ],
+        "environment": [
+          {
+            "name": "JWT_EXPIRATION",
+            "value": "86400000"
+          },
+          {
+            "name": "USER_SERVICE_URL",
+            "value": "http://fintrack-user-service.local:8081"
+          },
+          {
+            "name": "TRANSACTION_SERVICE_URL",
+            "value": "http://fintrack-transaction-service.local:8082"
+          }
+        ],
+        "secrets": [
+          {
+            "name": "JWT_SECRET",
+            "valueFrom": "arn:aws:secretsmanager:us-east-1:YOUR_ACCOUNT_ID:secret:fintrack/jwt/secret"
+          }
+        ],
+        "logConfiguration": {
+          "logDriver": "awslogs",
+          "options": {
+            "awslogs-group": "/ecs/fintrack-api-gateway",
+            "awslogs-region": "us-east-1",
+            "awslogs-stream-prefix": "ecs"
+          }
+        },
+        "healthCheck": {
+          "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"],
+          "interval": 30,
+          "timeout": 5,
+          "retries": 3,
+          "startPeriod": 60
+        }
+      }
+    ]
+  }
