@@ -6,6 +6,7 @@ import com.fintrack.transactionservice.dto.*;
 import com.fintrack.transactionservice.entity.Transaction;
 import com.fintrack.transactionservice.entity.TransactionCategory;
 import com.fintrack.transactionservice.entity.TransactionType;
+import com.fintrack.transactionservice.event.TransactionCreatedEvent;  // NEW IMPORT
 import com.fintrack.transactionservice.repository.TransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,45 +17,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;  // NEW IMPORT
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.UUID;  // NEW IMPORT
 
 @Service
 public class TransactionService {
-    // Private methods
     private static final Logger log = LoggerFactory.getLogger(TransactionService.class);
 
-    private final TransactionRepository transactionRepository;  // Database operations
+    private final TransactionRepository transactionRepository;
+    private final KafkaProducerService kafkaProducerService;  // NEW!
 
-    private TransactionResponse mapToResponse(Transaction transaction) {
-        return TransactionResponse.builder()
-                .id(transaction.getId())
-                .userId(transaction.getUserId())
-                .amount(transaction.getAmount())
-                .type(transaction.getType())
-                .category(transaction.getCategory())
-                .description(transaction.getDescription())
-                .transactionDate(transaction.getTransactionDate())
-                .merchant(transaction.getMerchant())
-                .accountNumber(transaction.getAccountNumber())
-                .notes(transaction.getNotes())
-                .status(transaction.getStatus())
-                .referenceNumber(transaction.getReferenceNumber())
-                .createdAt(transaction.getCreatedAt())
-                .updatedAt(transaction.getUpdatedAt())
-                .build();
-    }
-
-    private String generateReferenceNumber() {
-        return "TXN-" + UUID.randomUUID().toString().substring(0,8).toUpperCase();
-    }
-
-    
-    // Public methods
-    public TransactionService(TransactionRepository transactionRepository) {
+    public TransactionService(TransactionRepository transactionRepository,
+                             KafkaProducerService kafkaProducerService) {  // NEW!
         this.transactionRepository = transactionRepository;
+        this.kafkaProducerService = kafkaProducerService;  // NEW!
     }
 
     @Transactional
@@ -73,21 +52,49 @@ public class TransactionService {
                 .notes(request.getNotes())
                 .referenceNumber(generateReferenceNumber())
                 .build();
-        
+
         transaction = transactionRepository.save(transaction);
         log.info("Transaction created successfully with ID: {}", transaction.getId());
+
+        publishTransactionCreatedEvent(transaction);
 
         TransactionResponse response = mapToResponse(transaction);
         return ApiResponse.success("Transaction created successfully", response);
     }
 
+    private void publishTransactionCreatedEvent(Transaction transaction) {
+        try {
+            TransactionCreatedEvent event = TransactionCreatedEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .eventTimestamp(LocalDateTime.now())
+                    .transactionId(transaction.getId())
+                    .userId(transaction.getUserId())
+                    .userEmail("user-" + transaction.getUserId() + "@fintrack.com") // Will get from User Service later
+                    .amount(transaction.getAmount())
+                    .type(transaction.getType())
+                    .category(transaction.getCategory())
+                    .description(transaction.getDescription())
+                    .transactionDate(transaction.getTransactionDate())
+                    .merchant(transaction.getMerchant())
+                    .referenceNumber(transaction.getReferenceNumber())
+                    .createdAt(transaction.getCreatedAt())
+                    .build();
+
+            kafkaProducerService.publishTransactionCreatedEvent(event);
+            
+        } catch (Exception e) {
+            // Log error but don't fail transaction
+            log.error("Failed to publish transaction created event for transaction: {}", 
+                     transaction.getId(), e);
+        }
+    }
+    
     public ApiResponse<TransactionResponse> getTransactionById(Long transactionId, Long userId) {
         log.info("Fetching transaction ID: {} for user: {}", transactionId, userId);
 
         Transaction transaction = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
 
-        // Verify transaction belongs to user
         if (!transaction.getUserId().equals(userId)) {
             throw new ResourceNotFoundException("Transaction not found");
         }
@@ -118,7 +125,6 @@ public class TransactionService {
         log.info("Fetching transactions in category {} for users: {}", category, userId);
 
         Page<Transaction> transactions = transactionRepository.findByUserIdAndCategory(userId, category, pageable);
-
         Page<TransactionResponse> response = transactions.map(this::mapToResponse);
 
         return ApiResponse.success(response);
@@ -128,7 +134,6 @@ public class TransactionService {
         log.info("Fetching transactions for user: {} between {} and {}", userId, startDate, endDate);
 
         Page<Transaction> transactions = transactionRepository.findByUserIdAndTransactionDateBetween(userId, startDate, endDate, pageable);
-        
         Page<TransactionResponse> response = transactions.map(this::mapToResponse);
 
         return ApiResponse.success(response);
@@ -141,12 +146,10 @@ public class TransactionService {
         Transaction transaction = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
 
-        // Verify transaction belongs to user
         if (!transaction.getUserId().equals(userId)) {
             throw new ResourceNotFoundException("Transaction not found");
         }
 
-        // Update only non-null fields
         if (request.getAmount() != null) {
             transaction.setAmount(request.getAmount());
         }
@@ -175,12 +178,10 @@ public class TransactionService {
             transaction.setStatus(request.getStatus());
         }
 
-        // Save to database
         transaction = transactionRepository.save(transaction);
         log.info("Transaction updated successfully: {}", transactionId);
 
         TransactionResponse response = mapToResponse(transaction);
-
         return ApiResponse.success("Transaction updated successfully", response);
     }
 
@@ -191,7 +192,6 @@ public class TransactionService {
         Transaction transaction = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
 
-        // Verify transaction belongs to user
         if (!transaction.getUserId().equals(userId)) {
             throw new ResourceNotFoundException("Transaction not found");
         }
@@ -206,14 +206,10 @@ public class TransactionService {
         log.info("Calculating transaction summary for user: {}", userId);
 
         BigDecimal totalIncome = transactionRepository.calculateTotalByUserIdAndType(userId, TransactionType.INCOME);
-
         BigDecimal totalExpense = transactionRepository.calculateTotalByUserIdAndType(userId, TransactionType.EXPENSE);
-
         BigDecimal netBalance = totalIncome.subtract(totalExpense);
-
         Long totalTransactions = transactionRepository.findByUserId(userId, Pageable.unpaged()).getTotalElements();
 
-        // Get spending by category
         List<Object[]> spendingData = transactionRepository.getSpendingByCategory(userId);
         Map<String, BigDecimal> spendingByCategory = new HashMap<>();
         for (Object[] row: spendingData) {
@@ -233,6 +229,26 @@ public class TransactionService {
         return ApiResponse.success(summary);
     }
 
-    
+    private TransactionResponse mapToResponse(Transaction transaction) {
+        return TransactionResponse.builder()
+                .id(transaction.getId())
+                .userId(transaction.getUserId())
+                .amount(transaction.getAmount())
+                .type(transaction.getType())
+                .category(transaction.getCategory())
+                .description(transaction.getDescription())
+                .transactionDate(transaction.getTransactionDate())
+                .merchant(transaction.getMerchant())
+                .accountNumber(transaction.getAccountNumber())
+                .notes(transaction.getNotes())
+                .status(transaction.getStatus())
+                .referenceNumber(transaction.getReferenceNumber())
+                .createdAt(transaction.getCreatedAt())
+                .updatedAt(transaction.getUpdatedAt())
+                .build();
+    }
 
+    private String generateReferenceNumber() {
+        return "TXN-" + UUID.randomUUID().toString().substring(0,8).toUpperCase();
+    }
 }

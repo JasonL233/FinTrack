@@ -3,6 +3,10 @@
 # FinTrack Services - Startup Script
 # Automatically loads .env and starts all services
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "🚀 FinTrack Services Startup"
 echo "============================"
 echo ""
@@ -52,21 +56,21 @@ if [ "$1" = "all" ] || [ "$1" = "" ]; then
     echo ""
     
     echo "Starting user-service (port 8081)..."
-    cd user-service && mvn spring-boot:run > ../logs/user-service.log 2>&1 &
+    (cd "$SCRIPT_DIR/user-service" && mvn spring-boot:run > "$SCRIPT_DIR/logs/user-service.log" 2>&1) &
     USER_PID=$!
     echo "  ✓ User service started (PID: $USER_PID)"
     
     sleep 2
     
     echo "Starting transaction-service (port 8082)..."
-    cd ../transaction-service && mvn spring-boot:run > ../logs/transaction-service.log 2>&1 &
+    (cd "$SCRIPT_DIR/transaction-service" && mvn spring-boot:run > "$SCRIPT_DIR/logs/transaction-service.log" 2>&1) &
     TRANSACTION_PID=$!
     echo "  ✓ Transaction service started (PID: $TRANSACTION_PID)"
     
     sleep 2
     
     echo "Starting api-gateway (port 8080)..."
-    cd ../api-gateway && mvn spring-boot:run > ../logs/api-gateway.log 2>&1 &
+    (cd "$SCRIPT_DIR/api-gateway" && mvn spring-boot:run > "$SCRIPT_DIR/logs/api-gateway.log" 2>&1) &
     GATEWAY_PID=$!
     echo "  ✓ API gateway started (PID: $GATEWAY_PID)"
     
@@ -89,15 +93,15 @@ if [ "$1" = "all" ] || [ "$1" = "" ]; then
     echo ""
     
     # Save PIDs to file for easy stopping
-    mkdir -p logs
-    echo "$USER_PID $TRANSACTION_PID $GATEWAY_PID" > logs/service.pids
+    mkdir -p "$SCRIPT_DIR/logs"
+    echo "$USER_PID $TRANSACTION_PID $GATEWAY_PID" > "$SCRIPT_DIR/logs/service.pids"
     
 elif [ "$1" = "stop" ]; then
     # Stop all services
-    if [ -f logs/service.pids ]; then
+    if [ -f "$SCRIPT_DIR/logs/service.pids" ]; then
         echo "🛑 Stopping all services..."
-        kill $(cat logs/service.pids) 2>/dev/null
-        rm logs/service.pids
+        kill $(cat "$SCRIPT_DIR/logs/service.pids") 2>/dev/null
+        rm "$SCRIPT_DIR/logs/service.pids"
         echo "✅ All services stopped"
     else
         echo "⚠️  No running services found (logs/service.pids not found)"
@@ -111,13 +115,13 @@ elif [ "$1" != "" ]; then
     
     case $SERVICE in
         user-service)
-            cd user-service && mvn spring-boot:run
+            cd "$SCRIPT_DIR/user-service" && mvn spring-boot:run
             ;;
         transaction-service)
-            cd transaction-service && mvn spring-boot:run
+            cd "$SCRIPT_DIR/transaction-service" && mvn spring-boot:run
             ;;
         api-gateway)
-            cd api-gateway && mvn spring-boot:run
+            cd "$SCRIPT_DIR/api-gateway" && mvn spring-boot:run
             ;;
         *)
             echo "❌ Unknown service: $SERVICE"

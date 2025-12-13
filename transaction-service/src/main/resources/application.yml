@@ -20,9 +20,24 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
+
 jwt:
   secret: ${JWT_SECRET:default}
   expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
+
+kafka:
+  topic:
+    transaction-created: transaction-created-events
 
 logging:
   level:
